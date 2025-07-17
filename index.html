@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Weather Dashboard</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+
+<body>
+    <div class="container">
+        <!-- Header Section -->
+        <header class="header">
+            <h1>🌤️ Weather Dashboard</h1>
+            <p>Get real-time weather updates for any city</p>
+        </header>
+
+        <!-- Search Section -->
+        <section class="search-section">
+            <div class="search-container">
+                <input type="text" id="cityInput" placeholder="Enter city name (e.g., New York, London)"
+                    class="search-input">
+                <button id="searchBtn" class="search-btn">
+                    🔍 Search
+                </button>
+            </div>
+            <div id="errorMessage" class="error-message hidden">
+                <!-- Error messages will appear here -->
+            </div>
+        </section>
+
+        <!-- Loading State -->
+        <div id="loadingSpinner" class="loading hidden">
+            <div class="spinner"></div>
+            <p>Fetching weather data...</p>
+        </div>
+
+        <!-- Main Weather Display -->
+        <main class="weather-display">
+            <!-- Current Weather Card -->
+            <section id="currentWeather" class="current-weather hidden">
+                <div class="current-header">
+                    <h2 id="cityName">City Name</h2>
+                    <p id="currentDate">Date</p>
+                </div>
+
+                <div class="current-main">
+                    <div class="temperature-section">
+                        <span id="temperature">--°</span>
+                        <div class="temp-details">
+                            <p id="feelsLike">Feels like: --°</p>
+                            <p id="tempRange">H: --° L: --°</p>
+                        </div>
+                    </div>
+
+                    <div class="weather-icon-section">
+                        <img id="weatherIcon" src="" alt="Weather Icon" class="weather-icon">
+                        <p id="weatherDescription">--</p>
+                    </div>
+                </div>
+
+                <div class="weather-stats">
+                    <div class="stat">
+                        <span class="stat-label">Humidity</span>
+                        <span id="humidity" class="stat-value">--%</span>
+                    </div>
+                    <div class="stat">
+                        <span class="stat-label">Wind Speed</span>
+                        <span id="windSpeed" class="stat-value">-- km/h</span>
+                    </div>
+                    <div class="stat">
+                        <span class="stat-label">Pressure</span>
+                        <span id="pressure" class="stat-value">-- hPa</span>
+                    </div>
+                    <div class="stat">
+                        <span class="stat-label">Visibility</span>
+                        <span id="visibility" class="stat-value">-- km</span>
+                    </div>
+                </div>
+            </section>
+
+            <!-- 5-Day Forecast Section -->
+            <section id="forecast" class="forecast-section hidden">
+                <h3>5-Day Forecast</h3>
+                <div class="forecast-container">
+                    <!-- Forecast cards will be dynamically generated here -->
+                </div>
+            </section>
+        </main>
+
+        <!-- Footer -->
+        <footer class="footer">
+            <p>Weather data provided by OpenWeatherMap API</p>
+        </footer>
+    </div>
+
+    <script src="script.js"></script>
+</body>
+
+</html>
