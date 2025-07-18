@@ -2,6 +2,10 @@ class WeatherApp {
     constructor(apiKey) {
         this.apiKey = apiKey;
         this.apiBaseUrl = 'https://api.openweathermap.org/';
+
+        this.skycons = new Skycons({ 'color': 'white' });
+        this.skycons.play();
+
         this.state = {
             units: localStorage.getItem('weatherUnits') || 'metric',
             theme: localStorage.getItem('weatherTheme') || 'dark',
@@ -14,6 +18,7 @@ class WeatherApp {
 
     _getDomElements() {
         return {
+            weatherIconCanvas: document.getElementById('main-weather-icon'),
             themeToggleBtn: document.getElementById('themeToggleBtn'),
             searchSection: document.querySelector('.search-section'),
             cityInput: document.getElementById('cityInput'),
@@ -31,7 +36,6 @@ class WeatherApp {
             temperature: document.getElementById('temperature'),
             feelsLike: document.getElementById('feelsLike'),
             tempRange: document.getElementById('tempRange'),
-            weatherIcon: document.getElementById('weatherIcon'),
             weatherDescription: document.getElementById('weatherDescription'),
             windSpeed: document.getElementById('windSpeed'),
             humidity: document.getElementById('humidity'),
@@ -78,6 +82,148 @@ class WeatherApp {
                 this.dom.suggestionsContainer.innerHTML = '';
             }
         });
+    }
+
+    _getSkyconIdentifier(iconCode) {
+        const iconMap = {
+            '01d': 'CLEAR_DAY', '01n': 'CLEAR_NIGHT',
+            '02d': 'PARTLY_CLOUDY_DAY', '02n': 'PARTLY_CLOUDY_NIGHT',
+            '03d': 'CLOUDY', '03n': 'CLOUDY',
+            '04d': 'CLOUDY', '04n': 'CLOUDY',
+            '09d': 'RAIN', '09n': 'RAIN',
+            '10d': 'RAIN', '10n': 'RAIN',
+            '11d': 'RAIN', '11n': 'RAIN',
+            '13d': 'SNOW', '13n': 'SNOW',
+            '50d': 'FOG', '50n': 'FOG',
+        };
+        return iconMap[iconCode] || 'CLOUDY';
+    }
+
+    _renderAll() {
+        const { weather, forecast, airQuality } = this.currentData;
+        this._renderCurrentWeather(weather);
+        this._renderHourlyForecast(forecast.list);
+        this._renderDailyForecast(forecast.list);
+        this._renderAirQuality(airQuality.list[0]);
+        this._updateDynamicTheme(weather.weather[0]);
+
+        this.dom.weatherDisplay.classList.remove('hidden');
+        this.dom.weatherDisplay.classList.add('fade-in');
+    }
+
+    _renderCurrentWeather(data) {
+        const skyconIdentifier = this._getSkyconIdentifier(data.weather[0].icon);
+        this.skycons.set(this.dom.weatherIconCanvas, Skycons[skyconIdentifier]);
+
+        const isMetric = this.state.units === 'metric';
+        const tempUnit = isMetric ? '°C' : '°F';
+        const windUnit = isMetric ? 'km/h' : 'mph';
+        const toFahrenheit = (c) => (c * 9 / 5) + 32;
+        const toMph = (mps) => mps * 2.237;
+
+        // NEW LOGIC: Calculate today's true high and low from the forecast list
+        const today = new Date().toISOString().split('T')[0];
+        const todaysForecasts = this.currentData.forecast.list.filter(item => {
+            return new Date(item.dt * 1000).toISOString().split('T')[0] === today;
+        });
+
+        let highTemp = -Infinity;
+        let lowTemp = Infinity;
+
+        if (todaysForecasts.length > 0) {
+            highTemp = Math.max(...todaysForecasts.map(item => item.main.temp_max));
+            lowTemp = Math.min(...todaysForecasts.map(item => item.main.temp_min));
+        } else {
+            // Fallback to current weather data if no forecast for today is available
+            highTemp = data.main.temp_max;
+            lowTemp = data.main.temp_min;
+        }
+
+        this.dom.cityName.textContent = `${data.name}, ${data.sys.country}`;
+        this.dom.currentDate.textContent = new Date().toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' });
+        this.dom.temperature.textContent = `${(isMetric ? data.main.temp : toFahrenheit(data.main.temp)).toFixed(0)}${tempUnit}`;
+        this.dom.feelsLike.textContent = `Feels like: ${(isMetric ? data.main.feels_like : toFahrenheit(data.main.feels_like)).toFixed(0)}${tempUnit}`;
+        this.dom.weatherDescription.textContent = data.weather[0].description;
+        // UPDATED: Use the new calculated high and low temps
+        this.dom.tempRange.textContent = `${(isMetric ? highTemp : toFahrenheit(highTemp)).toFixed(0)}° / ${(isMetric ? lowTemp : toFahrenheit(lowTemp)).toFixed(0)}°`;
+        this.dom.windSpeed.textContent = `${(isMetric ? data.wind.speed * 3.6 : toMph(data.wind.speed)).toFixed(1)} ${windUnit}`;
+        this.dom.humidity.textContent = `${data.main.humidity}%`;
+        this.dom.pressure.textContent = `${data.main.pressure} hPa`;
+        this.dom.sunrise.textContent = new Date(data.sys.sunrise * 1000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+        this.dom.sunset.textContent = new Date(data.sys.sunset * 1000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    }
+
+    _renderDailyForecast(list) {
+        const dailyForecasts = {};
+        list.forEach(item => {
+            const date = new Date(item.dt * 1000).toISOString().split('T')[0];
+            if (!dailyForecasts[date]) dailyForecasts[date] = [];
+            dailyForecasts[date].push(item);
+        });
+
+        this.dom.forecastContainer.innerHTML = Object.keys(dailyForecasts).slice(1, 6).map((date, index) => {
+            const dayData = dailyForecasts[date];
+            const maxTemp = Math.max(...dayData.map(item => item.main.temp_max));
+            const minTemp = Math.min(...dayData.map(item => item.main.temp_min));
+            const iconData = dayData.find(d => d.dt_txt.includes("12:00:00")) || dayData[0];
+            const isMetric = this.state.units === 'metric';
+            const toFahrenheit = (c) => (c * 9 / 5) + 32;
+            const displayMax = isMetric ? maxTemp : toFahrenheit(maxTemp);
+            const displayMin = isMetric ? minTemp : toFahrenheit(minTemp);
+
+            return `
+                <div class="forecast-card fade-in" style="animation-delay: ${index * 100}ms">
+                    <p class="forecast-date">${new Date(date).toLocaleDateString([], { weekday: 'short' })}</p>
+                    <canvas id="forecast-icon-${index}" class="forecast-icon" width="50" height="50"></canvas>
+                    <p class="forecast-temp">${displayMax.toFixed(0)}° / ${displayMin.toFixed(0)}°</p>
+                    <p class="forecast-desc">${iconData.weather[0].description}</p>
+                </div>
+            `;
+        }).join('');
+
+        Object.keys(dailyForecasts).slice(1, 6).forEach((date, index) => {
+            const dayData = dailyForecasts[date];
+            const iconData = dayData.find(d => d.dt_txt.includes("12:00:00")) || dayData[0];
+            const skyconIdentifier = this._getSkyconIdentifier(iconData.weather[0].icon);
+            this.skycons.add(`forecast-icon-${index}`, Skycons[skyconIdentifier]);
+        });
+    }
+
+    // THIS FUNCTION IS NOW FIXED
+    _renderHourlyForecast(list) {
+        const hourlyData = list.slice(0, 8);
+        const isMetric = this.state.units === 'metric';
+        const tempUnit = isMetric ? '°C' : '°F';
+        const toFahrenheit = (c) => (c * 9 / 5) + 32;
+
+        this.dom.hourlyContainer.innerHTML = hourlyData.map((item, index) => {
+            const temp = isMetric ? item.main.temp : toFahrenheit(item.main.temp);
+            const time = new Date(item.dt * 1000).toLocaleTimeString([], { hour: 'numeric', hour12: true });
+
+            return `
+                <div class="hourly-card fade-in" style="animation-delay: ${index * 100}ms">
+                    <p class="hourly-time">${time}</p>
+                    <canvas id="hourly-icon-${index}" class="forecast-icon" width="40" height="40"></canvas>
+                    <p class="hourly-temp">${temp.toFixed(0)}${tempUnit}</p>
+                </div>
+            `;
+        }).join('');
+
+        hourlyData.forEach((item, index) => {
+            const skyconIdentifier = this._getSkyconIdentifier(item.weather[0].icon);
+            this.skycons.add(`hourly-icon-${index}`, Skycons[skyconIdentifier]);
+        });
+    }
+
+    _applyTheme() {
+        const isDark = this.state.theme === 'dark';
+        document.body.setAttribute('data-theme', isDark ? 'dark' : 'light');
+        this.dom.themeToggleBtn.textContent = isDark ? '☀️' : '🌙';
+        this.skycons.color = isDark ? 'white' : '#1a1a1a';
+
+        if (this.currentData) {
+            this._updateDynamicTheme(this.currentData.weather.weather[0]);
+        }
     }
 
     async _fetchApi(endpoint, params) {
@@ -155,71 +301,6 @@ class WeatherApp {
         }
     }
 
-    // UPDATED with a more robust mapping.
-    _getAnimatedIcon(iconCode) {
-        const iconMap = {
-            '01d': 'clear-day.svg',
-            '01n': 'clear-night.svg',
-            '02d': 'partly-cloudy-day.svg',
-            '02n': 'partly-cloudy-night.svg',
-            '03d': 'cloudy.svg',
-            '03n': 'cloudy.svg',
-            '04d': 'cloudy.svg',
-            '04n': 'cloudy.svg',
-            '09d': 'rain.svg',
-            '09n': 'rain.svg',
-            '10d': 'rain.svg',
-            '10n': 'rain.svg',
-            '11d': 'rain.svg', // Thunderstorm mapped to rain as a close visual
-            '11n': 'rain.svg',
-            '13d': 'snow.svg',
-            '13n': 'snow.svg',
-            '50d': 'fog.svg',
-            '50n': 'fog.svg',
-        };
-
-        const iconFileName = iconMap[iconCode];
-
-        // For debugging: see what the API sends and what we choose
-        console.log(`Weather code: ${iconCode}, Icon file: ${iconFileName || 'defaulting to cloudy.svg'}`);
-
-        return `icons/${iconFileName || 'cloudy.svg'}`;
-    }
-
-    _renderAll() {
-        const { weather, forecast, airQuality } = this.currentData;
-        this._renderCurrentWeather(weather);
-        this._renderHourlyForecast(forecast.list);
-        this._renderDailyForecast(forecast.list);
-        this._renderAirQuality(airQuality.list[0]);
-        this._updateDynamicTheme(weather.weather[0]);
-
-        this.dom.weatherDisplay.classList.remove('hidden');
-        this.dom.weatherDisplay.classList.add('fade-in');
-    }
-
-    _renderCurrentWeather(data) {
-        const isMetric = this.state.units === 'metric';
-        const tempUnit = isMetric ? '°C' : '°F';
-        const windUnit = isMetric ? 'km/h' : 'mph';
-        const toFahrenheit = (c) => (c * 9 / 5) + 32;
-        const toMph = (mps) => mps * 2.237;
-
-        this.dom.cityName.textContent = `${data.name}, ${data.sys.country}`;
-        this.dom.currentDate.textContent = new Date().toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' });
-        this.dom.temperature.textContent = `${(isMetric ? data.main.temp : toFahrenheit(data.main.temp)).toFixed(0)}${tempUnit}`;
-        this.dom.feelsLike.textContent = `Feels like: ${(isMetric ? data.main.feels_like : toFahrenheit(data.main.feels_like)).toFixed(0)}${tempUnit}`;
-        this.dom.weatherIcon.src = this._getAnimatedIcon(data.weather[0].icon);
-        this.dom.weatherIcon.alt = data.weather[0].description;
-        this.dom.weatherDescription.textContent = data.weather[0].description;
-        this.dom.tempRange.textContent = `${(isMetric ? data.main.temp_max : toFahrenheit(data.main.temp_max)).toFixed(0)}° / ${(isMetric ? data.main.temp_min : toFahrenheit(data.main.temp_min)).toFixed(0)}°`;
-        this.dom.windSpeed.textContent = `${(isMetric ? data.wind.speed * 3.6 : toMph(data.wind.speed)).toFixed(1)} ${windUnit}`;
-        this.dom.humidity.textContent = `${data.main.humidity}%`;
-        this.dom.pressure.textContent = `${data.main.pressure} hPa`;
-        this.dom.sunrise.textContent = new Date(data.sys.sunrise * 1000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-        this.dom.sunset.textContent = new Date(data.sys.sunset * 1000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-    }
-
     _renderAirQuality(data) {
         const aqi = data.main.aqi;
         const aqiLevels = { 1: "Good", 2: "Fair", 3: "Moderate", 4: "Poor", 5: "Very Poor" };
@@ -242,67 +323,10 @@ class WeatherApp {
         });
     }
 
-    _renderHourlyForecast(list) {
-        const hourlyData = list.slice(0, 8);
-        const isMetric = this.state.units === 'metric';
-        const tempUnit = isMetric ? '°C' : '°F';
-        const toFahrenheit = (c) => (c * 9 / 5) + 32;
-
-        this.dom.hourlyContainer.innerHTML = hourlyData.map((item, index) => {
-            const temp = isMetric ? item.main.temp : toFahrenheit(item.main.temp);
-            const time = new Date(item.dt * 1000).toLocaleTimeString([], { hour: 'numeric', hour12: true });
-            return `
-                <div class="hourly-card fade-in" style="animation-delay: ${index * 100}ms">
-                    <p class="hourly-time">${time}</p>
-                    <img class="forecast-icon" src="${this._getAnimatedIcon(item.weather[0].icon)}" alt="${item.weather[0].description}">
-                    <p class="hourly-temp">${temp.toFixed(0)}${tempUnit}</p>
-                </div>
-            `;
-        }).join('');
-    }
-
-    _renderDailyForecast(list) {
-        const dailyForecasts = {};
-        list.forEach(item => {
-            const date = new Date(item.dt * 1000).toISOString().split('T')[0];
-            if (!dailyForecasts[date]) dailyForecasts[date] = [];
-            dailyForecasts[date].push(item);
-        });
-
-        this.dom.forecastContainer.innerHTML = Object.keys(dailyForecasts).slice(1, 6).map((date, index) => {
-            const dayData = dailyForecasts[date];
-            const maxTemp = Math.max(...dayData.map(item => item.main.temp_max));
-            const minTemp = Math.min(...dayData.map(item => item.main.temp_min));
-            const iconData = dayData.find(d => d.dt_txt.includes("12:00:00")) || dayData[0];
-            const isMetric = this.state.units === 'metric';
-            const toFahrenheit = (c) => (c * 9 / 5) + 32;
-            const displayMax = isMetric ? maxTemp : toFahrenheit(maxTemp);
-            const displayMin = isMetric ? minTemp : toFahrenheit(minTemp);
-
-            return `
-                <div class="forecast-card fade-in" style="animation-delay: ${index * 100}ms">
-                    <p class="forecast-date">${new Date(date).toLocaleDateString([], { weekday: 'short' })}</p>
-                    <img class="forecast-icon" src="${this._getAnimatedIcon(iconData.weather[0].icon)}" alt="${iconData.weather[0].description}">
-                    <p class="forecast-temp">${displayMax.toFixed(0)}° / ${displayMin.toFixed(0)}°</p>
-                    <p class="forecast-desc">${iconData.weather[0].description}</p>
-                </div>
-            `;
-        }).join('');
-    }
-
     _handleThemeToggle() {
         this.state.theme = this.state.theme === 'light' ? 'dark' : 'light';
         localStorage.setItem('weatherTheme', this.state.theme);
         this._applyTheme();
-    }
-
-    _applyTheme() {
-        const isDark = this.state.theme === 'dark';
-        document.body.setAttribute('data-theme', isDark ? 'dark' : 'light');
-        this.dom.themeToggleBtn.textContent = isDark ? '☀️' : '🌙';
-        if (this.currentData) {
-            this._updateDynamicTheme(this.currentData.weather.weather[0]);
-        }
     }
 
     _handleUnitToggle() {
